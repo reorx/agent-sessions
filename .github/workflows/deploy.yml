@@ -22,20 +22,8 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
 
-      - name: Build HTML files
-        run: |
-          mkdir -p dist/claude-code
-          for f in claude-code/*.txt; do
-            [ -f "$f" ] || continue
-            basename="${f##*/}"
-            name="${basename%.txt}"
-            uv run claude-export-to-html.py "$f" -o "dist/claude-code/${name}.html"
-          done
-
-      - name: Generate index pages
-        run: |
-          python generate-index.py dist/claude-code -t "claude-code"
-          python generate-index.py dist -t "agent-sessions"
+      - name: Build
+        run: ./build.sh
 
       - uses: actions/upload-pages-artifact@v3
         with:

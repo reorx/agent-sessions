@@ -1,0 +1,218 @@
+:root {
+    --bg: #0d1117;
+    --terminal-bg: #161b22;
+    --terminal-border: #30363d;
+    --user-color: #9ca3af;
+    --assistant-color: #e6edf3;
+    --system-color: #484f58;
+    --header-color: #58a6ff;
+    --focus-border: #58a6ff;
+    --focus-bg: #1c2333;
+    --user-focus-border: #3fb950;
+    --user-focus-bg: #1a2332;
+    --scrollbar-thumb: #30363d;
+    --scrollbar-track: transparent;
+    --font-mono: "Mononoki Nerd Font Mono", Hack, "Berkeley Mono", "JetBrains Mono", "Fira Code", "SF Mono", "Cascadia Code", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    font-size: 14px;
+}
+
+body {
+    background: var(--bg);
+    color: var(--assistant-color);
+    font-family: var(--font-mono);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 0;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+}
+::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+}
+
+/* Terminal window */
+.terminal-window {
+    width: 100%;
+    min-height: 100vh;
+    background: var(--terminal-bg);
+    position: relative;
+}
+
+@media (min-width: 1040px) {
+    body {
+        padding: 24px;
+    }
+    .terminal-window {
+        width: fit-content;
+        min-height: auto;
+        border: 1px solid var(--terminal-border);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+}
+
+/* Title bar */
+.title-bar {
+    display: none;
+    height: 38px;
+    background: #1c2128;
+    border-bottom: 1px solid var(--terminal-border);
+    align-items: center;
+    padding: 0 16px;
+    gap: 8px;
+    user-select: none;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+@media (min-width: 1040px) {
+    .title-bar {
+        display: flex;
+    }
+}
+
+.title-bar .dots {
+    display: flex;
+    gap: 6px;
+}
+.title-bar .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
+.title-bar .dot.red { background: #ff5f57; }
+.title-bar .dot.yellow { background: #febc2e; }
+.title-bar .dot.green { background: #28c840; }
+
+.title-bar .title {
+    flex: 1;
+    text-align: center;
+    color: var(--user-color);
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Messages */
+.message {
+    position: relative;
+    padding: 1px;
+    border: 1px solid transparent;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+    cursor: pointer;
+    margin-bottom: 1em;
+}
+
+.message:hover {
+    background: rgba(88, 166, 255, 0.04);
+}
+.message.user:hover {
+    background: rgba(63, 185, 80, 0.04);
+}
+
+.message.focused {
+    border-color: var(--focus-border);
+    background: var(--focus-bg);
+}
+.message.user.focused {
+    border-color: var(--user-focus-border);
+    background: var(--user-focus-bg);
+}
+
+.message pre {
+    font-family: inherit;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: inherit;
+    line-height: calc(1em + 1px);
+}
+
+/* Role-specific styles */
+.message.user pre {
+    color: var(--user-color);
+}
+
+.message.assistant pre {
+    color: var(--assistant-color);
+}
+
+.message.system {
+    cursor: default;
+}
+.message.system pre {
+    color: var(--system-color);
+    font-size: 12px;
+    font-style: italic;
+}
+
+.message.header {
+    cursor: default;
+    margin-top: 1em;
+}
+.message.header pre {
+    color: var(--header-color);
+    line-height: 1em;
+}
+
+/* Inline title (narrow screens) */
+.inline-title {
+    color: var(--user-color);
+    margin-bottom: 1em;
+    border-bottom: 1px solid var(--user-color);
+    padding: 1px;
+}
+
+@media (min-width: 1040px) {
+    .inline-title {
+        display: none;
+    }
+}
+
+/* Navigation hint */
+.nav-hint {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    background: rgba(22, 27, 34, 0.9);
+    border: 1px solid var(--terminal-border);
+    padding: 8px 14px;
+    font-size: 11px;
+    color: var(--system-color);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    z-index: 100;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.nav-hint.visible {
+    opacity: 1;
+}
+
+.nav-hint kbd {
+    display: inline-block;
+    padding: 1px 5px;
+    font-family: inherit;
+    font-size: 11px;
+    background: var(--terminal-border);
+    margin: 0 2px;
+}

@@ -12,7 +12,6 @@ Usage:
 
 import argparse
 import html
-import re
 import sys
 from pathlib import Path
 
@@ -118,7 +117,20 @@ def extract_description(messages: list[dict]) -> str:
     return 'A Claude Code conversation'
 
 
-def generate_html(messages: list[dict], title: str, description: str, source_filename: str, max_line_len: int) -> str:
+SCRIPT_DIR = Path(__file__).resolve().parent
+DEFAULT_CSS = SCRIPT_DIR / 'static' / 'conversation.css'
+DEFAULT_JS = SCRIPT_DIR / 'static' / 'conversation.js'
+
+
+def generate_html(
+    messages: list[dict],
+    title: str,
+    description: str,
+    source_filename: str,
+    max_line_len: int,
+    css_url: str | None = None,
+    js_url: str | None = None,
+) -> str:
     """Generate the full HTML document."""
     msg_blocks = []
     nav_index = 0
@@ -143,7 +155,23 @@ def generate_html(messages: list[dict], title: str, description: str, source_fil
         nav_index += 1
 
     messages_html = '\n'.join(msg_blocks)
-    total_nav = nav_index
+
+    # CSS: external link or inline
+    if css_url:
+        css_block = f'<link rel="stylesheet" href="{html.escape(css_url, quote=True)}">'
+    else:
+        css_content = DEFAULT_CSS.read_text(encoding='utf-8')
+        css_block = f'<style>\n{css_content}</style>'
+
+    # Per-document dynamic style (content width depends on max_line_len)
+    dynamic_css = f'<style>@media (min-width: 1040px) {{ .content {{ width: calc({max_line_len}ch + 4px); }} }}</style>'
+
+    # JS: external src or inline
+    if js_url:
+        js_block = f'<script src="{html.escape(js_url, quote=True)}"></script>'
+    else:
+        js_content = DEFAULT_JS.read_text(encoding='utf-8')
+        js_block = f'<script>\n{js_content}</script>'
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -159,227 +187,8 @@ def generate_html(messages: list[dict], title: str, description: str, source_fil
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="{html.escape(title, quote=True)}">
 <meta name="twitter:description" content="{html.escape(description, quote=True)}">
-<style>
-:root {{
-    --bg: #0d1117;
-    --terminal-bg: #161b22;
-    --terminal-border: #30363d;
-    --user-color: #9ca3af;
-    --assistant-color: #e6edf3;
-    --system-color: #484f58;
-    --header-color: #58a6ff;
-    --focus-border: #58a6ff;
-    --focus-bg: #1c2333;
-    --user-focus-border: #3fb950;
-    --user-focus-bg: #1a2332;
-    --scrollbar-thumb: #30363d;
-    --scrollbar-track: transparent;
-    --font-mono: "Mononoki Nerd Font Mono", Hack, "Berkeley Mono", "JetBrains Mono", "Fira Code", "SF Mono", "Cascadia Code", Menlo, Consolas, "DejaVu Sans Mono", monospace;
-}}
-
-* {{
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}}
-
-html {{
-    font-size: 14px;
-}}
-
-body {{
-    background: var(--bg);
-    color: var(--assistant-color);
-    font-family: var(--font-mono);
-    line-height: 1.6;
-    min-height: 100vh;
-    display: flex;
-    justify-content: center;
-    padding: 0;
-}}
-
-/* Scrollbar */
-::-webkit-scrollbar {{
-    width: 8px;
-}}
-::-webkit-scrollbar-track {{
-    background: var(--scrollbar-track);
-}}
-::-webkit-scrollbar-thumb {{
-    background: var(--scrollbar-thumb);
-}}
-
-/* Terminal window */
-.terminal-window {{
-    width: 100%;
-    min-height: 100vh;
-    background: var(--terminal-bg);
-    position: relative;
-}}
-
-@media (min-width: 1040px) {{
-    .content {{
-        width: calc({max_line_len}ch + 4px);
-    }}
-    body {{
-        padding: 24px;
-    }}
-    .terminal-window {{
-        width: fit-content;
-        min-height: auto;
-        border: 1px solid var(--terminal-border);
-        border-radius: 8px;
-        overflow: hidden;
-    }}
-}}
-
-/* Title bar */
-.title-bar {{
-    display: none;
-    height: 38px;
-    background: #1c2128;
-    border-bottom: 1px solid var(--terminal-border);
-    align-items: center;
-    padding: 0 16px;
-    gap: 8px;
-    user-select: none;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-}}
-
-@media (min-width: 1040px) {{
-    .title-bar {{
-        display: flex;
-    }}
-}}
-
-.title-bar .dots {{
-    display: flex;
-    gap: 6px;
-}}
-.title-bar .dot {{
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-}}
-.title-bar .dot.red {{ background: #ff5f57; }}
-.title-bar .dot.yellow {{ background: #febc2e; }}
-.title-bar .dot.green {{ background: #28c840; }}
-
-.title-bar .title {{
-    flex: 1;
-    text-align: center;
-    color: var(--system-color);
-    font-size: 12px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}}
-
-/* Messages */
-.message {{
-    position: relative;
-    padding: 1px;
-    border: 1px solid transparent;
-    transition: border-color 0.15s ease, background-color 0.15s ease;
-    cursor: pointer;
-    margin-bottom: 1em;
-}}
-
-.message:hover {{
-    background: rgba(88, 166, 255, 0.04);
-}}
-.message.user:hover {{
-    background: rgba(63, 185, 80, 0.04);
-}}
-
-.message.focused {{
-    border-color: var(--focus-border);
-    background: var(--focus-bg);
-}}
-.message.user.focused {{
-    border-color: var(--user-focus-border);
-    background: var(--user-focus-bg);
-}}
-
-.message pre {{
-    font-family: inherit;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    font-size: inherit;
-    line-height: 1em;
-}}
-
-/* Role-specific styles */
-.message.user pre {{
-    color: var(--user-color);
-}}
-
-.message.assistant pre {{
-    color: var(--assistant-color);
-}}
-
-.message.system {{
-    cursor: default;
-}}
-.message.system pre {{
-    color: var(--system-color);
-    font-size: 12px;
-    font-style: italic;
-}}
-
-.message.header {{
-    cursor: default;
-}}
-.message.header pre {{
-    color: var(--header-color);
-}}
-
-/* Inline title (narrow screens) */
-.inline-title {{
-    color: var(--system-color);
-    font-size: 12px;
-    margin-bottom: 1em;
-}}
-
-@media (min-width: 1040px) {{
-    .inline-title {{
-        display: none;
-    }}
-}}
-
-/* Navigation hint */
-.nav-hint {{
-    position: fixed;
-    bottom: 16px;
-    right: 16px;
-    background: rgba(22, 27, 34, 0.9);
-    border: 1px solid var(--terminal-border);
-    padding: 8px 14px;
-    font-size: 11px;
-    color: var(--system-color);
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    z-index: 100;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-}}
-
-.nav-hint.visible {{
-    opacity: 1;
-}}
-
-.nav-hint kbd {{
-    display: inline-block;
-    padding: 1px 5px;
-    font-family: inherit;
-    font-size: 11px;
-    background: var(--terminal-border);
-    margin: 0 2px;
-}}
-</style>
+{css_block}
+{dynamic_css}
 </head>
 <body>
 
@@ -402,60 +211,7 @@ body {{
     <kbd>j</kbd><kbd>k</kbd> or <kbd>↑</kbd><kbd>↓</kbd> navigate &nbsp; <kbd>click</kbd> focus
 </div>
 
-<script>
-(function() {{
-    const navItems = document.querySelectorAll('.message[data-nav]');
-    const navHint = document.getElementById('navHint');
-    let currentIndex = -1;
-    let hintTimer = null;
-
-    function showHint() {{
-        navHint.classList.add('visible');
-        clearTimeout(hintTimer);
-        hintTimer = setTimeout(() => navHint.classList.remove('visible'), 2000);
-    }}
-
-    function focusMessage(index) {{
-        if (index < 0 || index >= navItems.length) return;
-        navItems.forEach(el => el.classList.remove('focused'));
-        currentIndex = index;
-        navItems[currentIndex].classList.add('focused');
-        navItems[currentIndex].scrollIntoView({{ behavior: 'smooth', block: 'nearest' }});
-    }}
-
-    document.addEventListener('keydown', function(e) {{
-        if (e.key === 'j' || e.key === 'ArrowDown') {{
-            e.preventDefault();
-            if (currentIndex === -1) {{
-                focusMessage(0);
-            }} else {{
-                focusMessage(currentIndex + 1);
-            }}
-            showHint();
-        }} else if (e.key === 'k' || e.key === 'ArrowUp') {{
-            e.preventDefault();
-            if (currentIndex === -1) {{
-                focusMessage(navItems.length - 1);
-            }} else {{
-                focusMessage(currentIndex - 1);
-            }}
-            showHint();
-        }} else if (e.key === 'Escape') {{
-            navItems.forEach(el => el.classList.remove('focused'));
-            currentIndex = -1;
-        }}
-    }});
-
-    navItems.forEach((el, idx) => {{
-        el.addEventListener('click', function() {{
-            focusMessage(idx);
-        }});
-    }});
-
-    // Show hint briefly on load
-    setTimeout(showHint, 500);
-}})();
-</script>
+{js_block}
 </body>
 </html>"""
 
@@ -464,6 +220,8 @@ def main():
     parser = argparse.ArgumentParser(description='Convert Claude Code exported .txt to HTML')
     parser.add_argument('input', help='Input .txt file')
     parser.add_argument('-o', '--output', help='Output .html file (default: same name as input)')
+    parser.add_argument('--css', help='URL/path to external CSS file (default: inline from static/conversation.css)')
+    parser.add_argument('--js', help='URL/path to external JS file (default: inline from static/conversation.js)')
     args = parser.parse_args()
 
     input_path = Path(args.input)
@@ -479,7 +237,15 @@ def main():
     description = extract_description(messages)
     source_filename = input_path.stem
 
-    output_html = generate_html(messages, title, description, source_filename, max_line_len)
+    output_html = generate_html(
+        messages,
+        title,
+        description,
+        source_filename,
+        max_line_len,
+        css_url=args.css,
+        js_url=args.js,
+    )
 
     if args.output:
         output_path = Path(args.output)
