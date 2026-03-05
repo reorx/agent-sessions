@@ -89,15 +89,36 @@ def extract_title(messages: list[dict]) -> str:
     """Extract a title from the first user message."""
     for msg in messages:
         if msg['role'] == 'user':
+            # Strip the leading "❯ " prefix
             first_line = msg['lines'][0].strip()
-            # Truncate to reasonable length
+            if first_line.startswith('❯ '):
+                first_line = first_line[2:]
             if len(first_line) > 80:
                 return first_line[:77] + '...'
             return first_line
     return 'Claude Conversation'
 
 
-def generate_html(messages: list[dict], title: str, source_filename: str, max_line_len: int) -> str:
+def extract_description(messages: list[dict]) -> str:
+    """Extract a description from the first assistant message for OG meta."""
+    for msg in messages:
+        if msg['role'] == 'assistant':
+            # Collect text lines, strip markers and leading whitespace
+            text_parts = []
+            for line in msg['lines']:
+                stripped = line.strip()
+                if stripped.startswith('⏺ '):
+                    stripped = stripped[2:]
+                if stripped:
+                    text_parts.append(stripped)
+            desc = ' '.join(text_parts)
+            if len(desc) > 200:
+                return desc[:197] + '...'
+            return desc
+    return 'A Claude Code conversation'
+
+
+def generate_html(messages: list[dict], title: str, description: str, source_filename: str, max_line_len: int) -> str:
     """Generate the full HTML document."""
     msg_blocks = []
     nav_index = 0
@@ -130,6 +151,14 @@ def generate_html(messages: list[dict], title: str, source_filename: str, max_li
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{html.escape(title)}</title>
+<meta name="description" content="{html.escape(description, quote=True)}">
+<meta property="og:type" content="article">
+<meta property="og:title" content="{html.escape(title, quote=True)}">
+<meta property="og:description" content="{html.escape(description, quote=True)}">
+<meta property="og:site_name" content="Agent Sessions">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{html.escape(title, quote=True)}">
+<meta name="twitter:description" content="{html.escape(description, quote=True)}">
 <style>
 :root {{
     --bg: #0d1117;
@@ -188,11 +217,10 @@ body {{
     position: relative;
 }}
 
-.content {{
-    width: calc({max_line_len}ch + 4px);
-}}
-
 @media (min-width: 1040px) {{
+    .content {{
+        width: calc({max_line_len}ch + 4px);
+    }}
     body {{
         padding: 24px;
     }}
@@ -252,7 +280,7 @@ body {{
 /* Messages */
 .message {{
     position: relative;
-    padding: 0 1px;
+    padding: 1px;
     border: 1px solid transparent;
     transition: border-color 0.15s ease, background-color 0.15s ease;
     cursor: pointer;
@@ -448,9 +476,10 @@ def main():
     messages = parse_messages(text)
 
     title = extract_title(messages)
+    description = extract_description(messages)
     source_filename = input_path.stem
 
-    output_html = generate_html(messages, title, source_filename, max_line_len)
+    output_html = generate_html(messages, title, description, source_filename, max_line_len)
 
     if args.output:
         output_path = Path(args.output)
