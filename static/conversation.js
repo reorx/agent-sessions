@@ -50,6 +50,21 @@
     });
   });
 
+  // Write-file fold/unfold
+  document.querySelectorAll('.message.write-file').forEach((el) => {
+    el.addEventListener('click', function (e) {
+      // Only toggle if clicking the ::after toggle area (below the pre)
+      // or if the pre is collapsed and user clicks anywhere on the message
+      const pre = el.querySelector('pre');
+      if (!el.classList.contains('expanded') && pre.scrollHeight <= pre.clientHeight) {
+        // Content fits within visible lines, no need to toggle
+        return;
+      }
+      el.classList.toggle('expanded');
+      e.stopPropagation();
+    });
+  });
+
   // Show hint briefly on load
   setTimeout(showHint, 500);
 })();

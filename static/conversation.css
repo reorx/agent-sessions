@@ -186,6 +186,32 @@ body {
     }
 }
 
+/* Write-file collapsible messages */
+.message.write-file pre {
+    --wf-visible-lines: 10;
+    max-height: calc(var(--wf-visible-lines) * (1em + 1px));
+    overflow: hidden;
+    position: relative;
+}
+
+.message.write-file::after {
+    content: '▼ show more';
+    display: block;
+    padding: 2px 6px;
+    font-size: 11px;
+    color: var(--system-color);
+    cursor: pointer;
+    user-select: none;
+}
+
+.message.write-file.expanded pre {
+    max-height: none;
+}
+
+.message.write-file.expanded::after {
+    content: '▲ show less';
+}
+
 /* Navigation hint */
 .nav-hint {
     position: fixed;

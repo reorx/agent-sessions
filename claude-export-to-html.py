@@ -12,6 +12,7 @@ Usage:
 
 import argparse
 import html
+import re
 import sys
 from pathlib import Path
 
@@ -122,6 +123,17 @@ DEFAULT_CSS = SCRIPT_DIR / 'static' / 'conversation.css'
 DEFAULT_JS = SCRIPT_DIR / 'static' / 'conversation.js'
 
 
+WRITE_FILE_RE = re.compile(r'^⏺ (?:Update|Write|Create|Edit)\(.*\)')
+
+
+def is_write_file_message(msg: dict) -> bool:
+    """Check if an assistant message is a file write operation."""
+    if msg['role'] != 'assistant':
+        return False
+    first_line = msg['lines'][0].strip()
+    return bool(WRITE_FILE_RE.match(first_line))
+
+
 def generate_html(
     messages: list[dict],
     title: str,
@@ -147,10 +159,11 @@ def generate_html(
             continue
 
         role_class = msg['role']
+        extra_class = ' write-file' if is_write_file_message(msg) else ''
         content = render_content(msg['lines'], msg['role'])
 
         msg_blocks.append(
-            f'<div class="message {role_class}" data-nav="{nav_index}" tabindex="-1"><pre>{content}</pre></div>'
+            f'<div class="message {role_class}{extra_class}" data-nav="{nav_index}" tabindex="-1"><pre>{content}</pre></div>'
         )
         nav_index += 1
 
