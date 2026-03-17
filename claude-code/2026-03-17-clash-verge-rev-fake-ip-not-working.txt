@@ -1,0 +1,198 @@
+╭─── Claude Code v2.1.76 ──────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting        │
+│                 Welcome back Xiao!                 │ started                 │
+│                                                    │ Run /init to create a … │
+│                       ▐▛███▜▌                      │ ─────────────────────── │
+│                      ▝▜█████▛▘                     │ Recent activity         │
+│                        ▘▘ ▝▝                       │ 1w ago  Implement the … │
+│        Opus 4.6 (1M context) · Claude Max ·        │ 1w ago  parse gao.base… │
+│        admin@ideachat.top's Organization           │ 2w ago  update @auto_u… │
+│                 ~/Code/clash_config                │ /resume for more        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+❯ i'm using Clash Verge Rev on my macos tahoe as the proxy app, here's how i    
+configure it , you can see it clearly that i enabled TUN and DNS override, and  
+inside it's configured as fake ip mode, so now my dns should be hijacked by     
+clash and always return fake ip like 198.18.0.4, but when dig a domain like     
+x.com it still not return the fake ip, only when i dig x.com @127.0.0.1 will    
+fake ip returned. please help investigate the problem.                          
+                                                                                
+clash verge's logs are in dir: /Users/reorx/Library/Application                 
+Support/io.github.clash-verge-rev.clash-verge-rev/logs                          
+  ⎿  [Image #1]
+
+⏺ Let me check your system DNS config and the Clash logs to understand what's
+  going on.
+
+⏺ Bash(scutil --dns | head -40)
+  ⎿  DNS configuration
+
+     resolver #1
+     … +31 lines (ctrl+o to expand)
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Bash(ifconfig | grep -A 5 utun)
+  ⎿  utun0: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST> mtu 1500
+        inet6 fe80::c174:2af2:b8f3:88f%utun0 prefixlen 64 scopeid 0x11
+        nd6 options=201<PERFORMNUD,DAD>
+     … +20 lines (ctrl+o to expand)
+
+⏺ Read 2 files (ctrl+o to expand)
+
+⏺ Bash(dig x.com +short 2>&1)
+  ⎿  172.66.0.227
+
+⏺ Bash(dig x.com @127.0.0.1 +short 2>&1)
+  ⎿  198.18.0.4
+
+⏺ Bash(networksetup -getdnsservers Wi-Fi 2>&1)
+  ⎿  114.114.114.114
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Bash(netstat -rn | grep -E "default|198.18" | head -10)
+  ⎿  default            192.168.0.1        UGScg                 en0
+     default            link#23            UCSIg               utun6
+     1                  198.18.0.1         UGSc                utun7
+     … +7 lines (ctrl+o to expand)
+
+⏺ Found the issue. Let me check the Clash runtime config to confirm.
+
+⏺ Bash(scutil --dns)
+  ⎿  DNS configuration
+
+     resolver #1
+     … +31 lines (ctrl+o to expand)
+
+⏺ Read 3 files (ctrl+o to expand)
+
+⏺ Now I see the full picture. Let me verify one more thing.
+
+⏺ Bash(dig x.com +short +identify 2>&1; echo "---"; dig x.com @114.114.114.114
+      +short 2>&1; echo "---"; nslookup x.com 2>&1 | head -10)
+  ⎿  172.66.0.227 from server 100.100.100.100 in 32 ms.
+     ---
+     198.18.0.4
+     … +7 lines (ctrl+o to expand)
+
+⏺ That confirms it. Here's what's happening:
+
+  Root cause: Tailscale's DNS is bypassing Clash's TUN.
+
+  - dig x.com → queries 100.100.100.100 (Tailscale MagicDNS on utun6) → returns
+  real IP 172.66.0.227
+  - dig x.com @114.114.114.114 → queries through Clash's TUN (utun7) → returns 
+  fake IP 198.18.0.4
+  - dig x.com @127.0.0.1 → queries Clash's DNS listener directly → returns fake
+  IP 198.18.0.4
+
+  Your /etc/resolv.conf is set to nameserver 100.100.100.100 by Tailscale.
+  Traffic to 100.100.100.100 goes directly through Tailscale's own tunnel
+  interface (utun6), completely bypassing Clash's TUN interface (utun7). So
+  Clash never gets to hijack those DNS queries.
+
+  For normal apps (browsers, etc.), this likely still works because
+  mDNSResponder uses the scutil DNS config where the default resolver
+  (114.114.114.114) goes through Clash's TUN. But dig/nslookup read
+  /etc/resolv.conf directly and hit Tailscale's DNS.
+
+  Fixes (pick one):
+
+  1. Disable Tailscale's MagicDNS — In Tailscale admin console or tailscale set 
+  --accept-dns=false. This stops Tailscale from overriding /etc/resolv.conf.
+  2. Set system DNS manually to 127.0.0.1 — Run networksetup -setdnsservers 
+  Wi-Fi 127.0.0.1 to force the system resolver to use Clash's DNS. Though
+  Tailscale may override this again.
+  3. Use both together carefully — If you need Tailscale DNS for *.ts.net
+  domains, you could disable MagicDNS and add Tailscale DNS as a nameserver only
+   for the ts.net domain in Clash's DNS config.
+
+  Option 1 is the cleanest if you don't rely on Tailscale's MagicDNS for
+  resolving tailnet hostnames.
+
+✻ Crunched for 4m 35s
+
+❯ yes i disabled tailscale then normal dig returns fake ip, wtf, how does       
+tailscale do it, how can it has higher priority than clash, which is supposed   
+to hijack all :53 request outbound                                              
+
+⏺ It's about routing specificity and interface-scoped routes.
+
+  Clash's TUN uses the classic "catch-all" trick:
+  0/1      → utun7 (Clash)
+  128.0/1  → utun7 (Clash)
+  These are more specific than default but still broad.
+
+  Tailscale, however, sets up an interface-scoped route for 100.100.100.100
+  directly bound to utun6. You can see it in scutil --dns:
+  resolver #1
+    nameserver[0] : 100.100.100.100
+    if_index : 23 (utun6)    ← pinned to Tailscale's interface
+
+  When the kernel routes a packet to 100.100.100.100, it sees this
+  interface-bound route and sends it directly through utun6, never touching
+  utun7. Clash's dns-hijack: any:53 only applies to packets that actually arrive
+   at its TUN interface — it never sees these packets.
+
+  On top of that, Tailscale on macOS uses Apple's Network Extension framework
+  (NEPacketTunnelProvider), which is a privileged system-level API. It can:
+  - Override /etc/resolv.conf via NEDNSSettings
+  - Register itself as a DNS handler in the OS network stack
+  - Claim specific routes that are interface-bound (not just metric-based)
+
+  These interface-scoped routes are essentially "pre-routed" by the kernel —
+  they bypass the normal routing table lookup that Clash's 0/1 + 128/1 trick
+  depends on.
+
+  TL;DR: Clash hijacks at the routing layer. Tailscale hijacks at the OS network
+   extension layer, which sits above routing. The kernel delivers DNS packets to
+   Tailscale's tunnel before Clash's routing rules ever get consulted.
+
+  If you want both running, tailscale set --accept-dns=false is the way — it
+  tells Tailscale to stop claiming DNS authority while keeping the tunnel itself
+   working.
+
+✻ Worked for 59s
+
+❯ 重新用中文进行一下说明                                                        
+
+⏺ Tailscale 为什么能绕过 Clash 的 TUN DNS 劫持
+
+  Clash 的 TUN 工作原理：
+
+  Clash 通过路由表的 "0/1 + 128/0/1" 技巧把所有流量引到自己的 utun7：
+  0/1      → utun7 (Clash)
+  128.0/1  → utun7 (Clash)
+  然后对经过 utun7 的 :53 端口流量进行 DNS 劫持。关键点是：Clash 
+  只能劫持到达它自己 TUN 接口的流量。
+
+  Tailscale 的做法不一样：
+
+  Tailscale 用的是 macOS 的 Network Extension 
+  框架（NEPacketTunnelProvider），这是苹果提供的系统级特权
+  API，比普通路由层级更高。它可以：
+
+  1. 直接写 /etc/resolv.conf，把 DNS 指向自己的 100.100.100.100
+  2. 注册接口绑定路由——100.100.100.100 被绑定在 utun6
+  上，内核看到这个路由后，直接把 DNS 包送进 Tailscale
+  的隧道，根本不走常规路由表查找
+
+  在 scutil --dns 里能看到：
+  nameserver[0] : 100.100.100.100
+  if_index : 23 (utun6)    ← 绑死在 Tailscale 的接口上
+
+  所以整个流程是：
+
+  1. dig x.com → 读 /etc/resolv.conf → 目标 100.100.100.100
+  2. 内核发现 100.100.100.100 有接口绑定路由 → 直接走 utun6（Tailscale）
+  3. 数据包从未经过 utun7（Clash），所以 Clash 的 dns-hijack: any:53 根本看不到
+  4. Tailscale 拿到 DNS 请求后转发给上游，返回真实 IP
+
+  简单说：Clash 在路由层劫持，Tailscale 在更上层的 OS 
+  网络扩展层劫持。内核先把包交给 Tailscale，Clash 的路由规则根本没机会生效。
+
+  解决方案：
+
+  如果要同时用两个，跑 tailscale set --accept-dns=false，让 Tailscale 不再接管
+  DNS，隧道本身照常工作。
