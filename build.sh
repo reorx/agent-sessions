@@ -3,18 +3,32 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 rm -rf dist
-mkdir -p dist/claude-code
-cp -r static dist/static
+mkdir -p dist/static
+cp -r static/* dist/static/
 
-for f in claude-code/*.txt; do
-    [ -f "$f" ] || continue
-    basename="${f##*/}"
-    name="${basename%.txt}"
-    uv run claude-export-to-html.py "$f" -o "dist/claude-code/${name}.html" \
-        --css ../static/conversation.css --js ../static/conversation.js
+# === Parse stage ===
+echo "=== Parsing raw files ==="
+uv run parse-claude-code.py claude-code/raw/
+
+# === Render stage ===
+echo "=== Rendering HTML ==="
+for agent_dir in claude-code codex; do
+    mkdir -p "dist/$agent_dir"
+    for f in "$agent_dir"/*.jsonl; do
+        [ -f "$f" ] || continue
+        name="$(basename "${f%.jsonl}")"
+        uv run render-html.py "$f" -o "dist/$agent_dir/${name}.html" \
+            --css ../static/conversation.css --js ../static/conversation.js
+    done
 done
 
-python generate-index.py dist/claude-code -t "claude-code"
+# === Index stage ===
+echo "=== Generating indexes ==="
+for agent_dir in claude-code codex; do
+    if [ -d "dist/$agent_dir" ] && [ "$(ls -A "dist/$agent_dir" 2>/dev/null)" ]; then
+        python generate-index.py "dist/$agent_dir" -t "$agent_dir"
+    fi
+done
 python generate-index.py dist -t "agent-sessions"
 
 echo "Build complete: dist/"
