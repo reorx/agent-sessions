@@ -28,6 +28,9 @@
 - `parse-claude-code.py`
   - Claude Code 专用 parser
   - 读取 `claude-code/raw/*.txt`，输出 `claude-code/*.jsonl`
+- `parse-codex.py`
+  - Codex 专用 parser
+  - 读取 `codex/raw/*.jsonl`（Codex CLI rollout 导出），输出 `codex/*.jsonl`
 - `render-html.py`
   - 统一 HTML 渲染器
   - 读取任意标准 JSONL，输出对应 HTML
@@ -100,8 +103,9 @@
   - `static/conversation.js`
 - 新增 agent 支持时，需要：
   1. 编写 `parse-<agent>.py`，读取 `<agent>/raw/*`，输出 `<agent>/*.jsonl`
-  2. 在 `build.sh` 的 parse 阶段添加调用
+  2. 在 `build.sh` 的 parse 阶段添加调用（用 `[ "$(ls ...)" ] &&` 包裹以允许 raw 为空）
   3. 渲染和索引阶段自动覆盖，无需改动
+- 当 raw 文件与标准 JSONL 共享 `.jsonl` 后缀时（例如 Codex），parser 单文件模式的默认输出路径绝不能等于输入路径。写入前显式对比 `output.resolve() == input.resolve()`，相等就报错退出——否则会直接覆盖 raw 文件。`codex/raw/` 下的原始导出未入版本控制，一旦覆盖无法恢复。
 
 ## 已知实现特征
 

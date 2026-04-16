@@ -8,7 +8,8 @@ cp -r static/* dist/static/
 
 # === Parse stage ===
 echo "=== Parsing raw files ==="
-uv run parse-claude-code.py claude-code/raw/
+[ "$(ls claude-code/raw/*.txt 2>/dev/null)" ] && uv run parse-claude-code.py claude-code/raw/
+[ "$(ls codex/raw/*.jsonl 2>/dev/null)" ] && uv run parse-codex.py codex/raw/
 
 # === Render stage ===
 echo "=== Rendering HTML ==="
